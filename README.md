@@ -13,7 +13,7 @@ will return subnet info for an ip/cidr or for the subnet two ips belong to
 	and print all info about the subnet
 
 ------------------------------------------------------------
-
+~~~
 ccarls02$ ./subnet.pl 144.230.82.244/28
 
    /28 Subnet Mask: 255.255.255.240
@@ -56,4 +56,4 @@ ccarls02$ ./subnet.pl 144.230.82.244 144.230.82.242
 
         Usable IPs: 8 - 2
 
-
+~~~
