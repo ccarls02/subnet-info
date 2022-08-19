@@ -3,55 +3,84 @@
 use warnings;
 use strict; 
 
-our $inip = $ARGV[0];
-our $xflag; 
+our $xflag;
+if ($ARGV[0] eq "explain") { $xflag = shift @ARGV; }
 
-if ($inip =~ /explain/) {
-	$xflag = shift @ARGV;
-	$inip = shift @ARGV;
+our $inip = $ARGV[0];
+
+
+$inip =~ m{(\d+)\.(\d+)\.(\d+)\.(\d+)(\/)(\d+)};
+our $oct1 = $1;
+our $oct2 = $2;
+our $oct3 = $3;
+our $oct4 = $4;
+my $cslash = $5;
+our $subnet = $6;
+
+my $is0 = validate_ip($ARGV[0]);
+
+if (!$ARGV[1] && !$subnet) { 
+	print "\n\n  Error: No Subnet Specified!\n\n";
+	print "  <IP><forward slash><subnet>\n\n";
+	&usage;
+	exit;
 	}
 
-
-
-$inip =~ m{(\d+)(\.)(\d+)(\.)(\d+)(\.)(\d+)(\/)(\d+)};
-our $oct1 = $1;
-my $div1 = $2;
-our $oct2 = $3;
-my $div2 = $4;
-our $oct3 = $5;
-my $div3 = $6;
-our $oct4 = $7;
-my $cslash = $8;
-our $subnet = $9;
-
+if (!$is0) {                 
+	print "\n\n";
+        print " Invalid IP!: $inip\n\n";
+        print "              \n\n";
+        &usage;
+        exit;
+        }
 
 ## check if good ip/cidr
-if ($div1 && $div2 && $div3 && $cslash) { 
-	if ($subnet < 1 || $subnet > 32) {
+if ($cslash) { 
+	if ($subnet < 1 || $subnet > 31) {
 		print "\n\n  Invalid Subnet!:  /$subnet\n\n";
 		&usage;
 		exit;
 		}
+	print "\n ** SUBNET INFO ** \n";
 	&print_subnetinfo;  
+	exit;
 	} 
 
-elsif ($ARGV[0] && $ARGV[1]) { 
+my $is1 = validate_ip($ARGV[1]);
 
-	if ($ARGV[0] =~ m{(\d+)(\.)(\d+)(\.)(\d+)(\.)(\d+)} && $ARGV[1] =~ m{(\d+)(\.)(\d+)(\.)(\d+)(\.)(\d+)} ) {	
-		&compareaddys; 
-		}
-	else { &usage; exit; }
-	}  
-
-else { 	
-	&usage;
-	exit; 
+if ($is0 && $is1) {
+        print "\n ** COMPARE ADDRESSES ** \n";
+        &compareaddys;
+	exit;
+	}
+else {
+	print "\n\n";
+	if (!$is0) { print " Invalid first IP!: $ARGV[0]\n"; }
+	if (!$is1) { print " Invalid second IP!: $ARGV[1]\n"; }
+	print "\n";
+        &usage;
+        exit;
 	}
 
+&usage;
+exit;
 
+###########################################
+sub validate_ip {
+my $ipin = shift;
+## get rid of subnet if there
+my @iparr = split /\//, $ipin;
+my @octs = split /\./, $iparr[0];
+
+foreach (my $i=0;$i<4;$i++) {
+  if ($octs[$i] < 0 || $octs[$i] > 255) {return 0; }
+  if ($octs[$i] eq "") { return 0; }
+}
+return 1;
+}
 ######################################
 ## if 2 IPs entered, find the subnet
-##
+## main function 1 (of 2)
 
 sub compareaddys {
 
@@ -77,6 +106,12 @@ for (@ctr) {
 
 
 my $actualsubnet = getdecsubnet($bip1,$cidr_match);
+
+############### set GLOBALS for the 'explain' feature
+our $subnet = $cidr_match;
+(our $oct1, our $oct2, our $oct3, our $oct4) = split /\./, $actualsubnet;
+################
+
 $marker += $cidr_match;
 
 ## correct for periods between octets
@@ -93,6 +128,8 @@ print "   IP2: " . format_bip($bip2) . " | $ip2\n";
 print "\n";
 print "   IPs are both in subnet: $actualsubnet / $cidr_match\n\n";
 
+if ($cidr_match == 0) { return; }
+
 (my $subnetdec,my $wilddec) = cidr2dec($cidr_match);
 
 
@@ -107,6 +144,7 @@ fullsubnetinfo($actualsubnet,$cidr_match);
 
 #####################################################
 ## if ip/cidr print the subnet
+## main function 2 (of 2)
 
 sub print_subnetinfo {
 
@@ -148,12 +186,6 @@ my $activeoctet = 0;
 my $activecidr = 0;
 my $cct = $cidr;
 
-###
-###  INVALID FOR CIDR > 30
-###
-if ($cidr > 31) { 
-	return;
-	}
 
 ##
 ## examine IP for active octet/mask and calculate block size
@@ -172,9 +204,9 @@ for my $x (1..4) {
 
 my $blocksize = 2**(8-$activecidr);
 
-## for debug:
 my $workingoctetbin = dec2bin($subnet[$activeoctet-1]);
 my $workingoctetdec = $subnet[$activeoctet-1];
+
 ##
 ## calculate next network from block size
 ##
@@ -195,15 +227,9 @@ if ($nextnetwork[1] eq 256) {
 	$nextnetwork[1] = 0;
 	$nextnetwork[0]++;
 	}
+
 my $nextnetdec = join(".", @nextnetwork);
 if ($nextnetwork[0] eq 256) { $nextnetdec = "N/A"; }
-
-## debug info
-#print " (active octet: $activeoctet)\n";
-#print " (localcidr:$activecidr)\n";
-#print " (workingoctet:$workingoctetdec / $workingoctetbin)\n";
-#print " (blocksize: $blocksize)\n";
-
 
 ## calculate broadcast
 my @broadcast = @nextnetwork;
@@ -224,9 +250,7 @@ printf("%20s%s\n"," Subnet Range: ","$rangelowdec -");
 printf("%20s%s\n\n","", $rangehidec);
 printf("%20s%s\n\n"," Broadcast Addy: ",$broadcastdec);
 printf("%20s%s\n\n"," Next Network Addy: ",$nextnetdec);
-
-my $hostsavail = hostslookuptable($cidr);
-printf("%20s%s\n"," Usable IPs: ",$hostsavail);
+printf("%20s%s\n"," Usable IPs: ",hostslookuptable($cidr));
 print "\n\n";
 
 ###
@@ -234,7 +258,7 @@ print "\n\n";
 ###
 
 if ($xflag) { 
-## get bin vals
+## get bin vals.  using GLOBALS
 my $binoct1 = dec2bin($oct1);
 my $binoct2 = dec2bin($oct2);
 my $binoct3 = dec2bin($oct3);
@@ -269,7 +293,6 @@ elsif ($activeoctet == 4) {
 	}
 
 
- #  11 is length(label), $activeoctet-1 to compensate for '.'
 my $submarker = (" " x ($subnet+$activeoctet-1)) . " network <-|-> hosts";  
 my $msp = (" " x 15);
 my $netbits = $subnet;
@@ -294,10 +317,10 @@ print $msp . $submarker . "\n";
 print $msp . "Binary IP: $binoct1.$binoct2.$binoct3.$binoct4 \n";
 print "\n";
 #print $msp . "   Subnet: " . ip2bin($subnetaddy,"dots") . "\n";
+#print $msp . "   Subnet: " . format_bip(ip2bin($subnetaddy)) . "\n";
 print $msp . " Active Octet: $aap\n";
 print $msp . " Active CIDR : $activecidr bit(s) of this octet are NETWORK\n";
 print "\n";	
-#print $msp . "Active Octet decimal: $workingoctetdec\n";
 print $msp . " Active Octet binary: $explanationoctet\n";
 print $msp . "                     " . (" " x $activecidr) . "↑\n";
 print $msp . "        " . (" " x $activecidr) ."Blocksize Bit|\n";
@@ -335,6 +358,9 @@ if ($lip[1] eq 256) {
 	$lip[0]++;
 	$lip[1] = 0;
 	}
+if ($lip[0] eq 256) {
+	return "<Error>";
+	}
 return join(".", @lip);
 }
 # # # # # # ###  # # # #
@@ -355,7 +381,9 @@ if ($lip[1] eq -1) {
         $lip[0]--;
         $lip[1] = 255;
         }
-
+if ($lip[0] eq -1) {
+	return "<Error>";
+        }
 return join(".", @lip);
 }
 ######################################
@@ -439,16 +467,13 @@ my $boct2 = substr($bin,8,8);
 my $boct3 = substr($bin,16,8);
 my $boct4 = substr($bin,24,8,);
 
-my $deco1 = oct("0b".$boct1);
-my $deco2 = oct("0b".$boct2);
-my $deco3 = oct("0b".$boct3);
-my $deco4 = oct("0b".$boct4);
-
-return $deco1 . "." . $deco2 . "." . $deco3 . "." . $deco4;
+return oct("0b".$boct1) . "." . oct("0b".$boct2)  . "." . oct("0b".$boct3)  . "." . oct("0b".$boct4);
 }
 
 #######################################
 ## add period delimiters to octets in binary IP
+## input: binary IP
+## output: binary IP with '.' delimiters
 
 sub format_bip {
 my $bin = shift;
@@ -460,7 +485,9 @@ return $b1 . "." . $b2 . "." . $b3. "." . $b4
 }
 
 ####################################################
-## in: decimal out: binary octet (padded to 8 chars)
+## in: decimal number
+## out: binary octet (padded to 8 chars)
+
 sub dec2bin {
 my $dec = shift;
 return sprintf("%0*b",8,$dec);
@@ -529,7 +556,7 @@ my $int = shift;
 my @intarr = split //, $int;
 my $lc = 1;
 my $retstr;
-for (my $i = $#intarr;$i>-1;$i-- ) {
+for (my $i = $#intarr; $i>-1; $i-- ) {
 	$retstr .= $intarr[$i];
 	if (!($lc % 3) && ($i != 0)) { $retstr.= ","; }
 	$lc++;
