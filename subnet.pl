@@ -4,22 +4,36 @@ use warnings;
 use strict; 
 
 our $inip = $ARGV[0];
+our $xflag; 
+
+if ($inip =~ /explain/) {
+	$xflag = shift @ARGV;
+	$inip = shift @ARGV;
+	}
+
 
 
 $inip =~ m{(\d+)(\.)(\d+)(\.)(\d+)(\.)(\d+)(\/)(\d+)};
 our $oct1 = $1;
-our $div1 = $2;
+my $div1 = $2;
 our $oct2 = $3;
-our $div2 = $4;
+my $div2 = $4;
 our $oct3 = $5;
-our $div3 = $6;
+my $div3 = $6;
 our $oct4 = $7;
-our $cslash = $8;
+my $cslash = $8;
 our $subnet = $9;
 
 
 ## check if good ip/cidr
-if ($div1 && $div2 && $div3 && $cslash) { &print_subnetinfo;  } 
+if ($div1 && $div2 && $div3 && $cslash) { 
+	if ($subnet < 1 || $subnet > 32) {
+		print "\n\n  Invalid Subnet!:  /$subnet\n\n";
+		&usage;
+		exit;
+		}
+	&print_subnetinfo;  
+	} 
 
 elsif ($ARGV[0] && $ARGV[1]) { 
 
@@ -137,7 +151,9 @@ my $cct = $cidr;
 ###
 ###  INVALID FOR CIDR > 30
 ###
-if ($cidr > 30) { return;}
+if ($cidr > 31) { 
+	return;
+	}
 
 ##
 ## examine IP for active octet/mask and calculate block size
@@ -157,8 +173,8 @@ for my $x (1..4) {
 my $blocksize = 2**(8-$activecidr);
 
 ## for debug:
-#$workingoctetbin = dec2bin($workingoctetdec);
-#$workingoctetdec = $subnet[$activeoctet-1];
+my $workingoctetbin = dec2bin($subnet[$activeoctet-1]);
+my $workingoctetdec = $subnet[$activeoctet-1];
 ##
 ## calculate next network from block size
 ##
@@ -180,7 +196,7 @@ if ($nextnetwork[1] eq 256) {
 	$nextnetwork[0]++;
 	}
 my $nextnetdec = join(".", @nextnetwork);
-
+if ($nextnetwork[0] eq 256) { $nextnetdec = "N/A"; }
 
 ## debug info
 #print " (active octet: $activeoctet)\n";
@@ -212,6 +228,90 @@ printf("%20s%s\n\n"," Next Network Addy: ",$nextnetdec);
 my $hostsavail = hostslookuptable($cidr);
 printf("%20s%s\n"," Usable IPs: ",$hostsavail);
 print "\n\n";
+
+###
+### EXPLANATION SECTION
+###
+
+if ($xflag) { 
+## get bin vals
+my $binoct1 = dec2bin($oct1);
+my $binoct2 = dec2bin($oct2);
+my $binoct3 = dec2bin($oct3);
+my $binoct4 = dec2bin($oct4);
+my $explanationoctet = "";
+my $begstr = "";
+my $endstr = "";
+
+if ($activeoctet == 1) {
+	$begstr = substr($binoct1,0,$activecidr);
+	$endstr = substr($binoct1,$activecidr);
+	$binoct1 = $begstr . "|" . $endstr;
+	$explanationoctet = $binoct1;
+	}
+elsif ($activeoctet == 2) {
+        $begstr = substr($binoct2,0,$activecidr);
+        $endstr = substr($binoct2,$activecidr);
+        $binoct2 = $begstr . "|" . $endstr;
+	$explanationoctet = $binoct2;
+	}
+elsif ($activeoctet == 3) {
+        $begstr = substr($binoct3,0,$activecidr);
+        $endstr = substr($binoct3,$activecidr);
+        $binoct3 = $begstr . "|" . $endstr;
+	$explanationoctet = $binoct3;
+	}
+elsif ($activeoctet == 4) {
+        $begstr = substr($binoct4,0,$activecidr);
+        $endstr = substr($binoct4,$activecidr);
+        $binoct4 = $begstr . "|" . $endstr;
+	$explanationoctet = $binoct4;
+	}
+
+
+ #  11 is length(label), $activeoctet-1 to compensate for '.'
+my $submarker = (" " x ($subnet+$activeoctet-1)) . " network <-|-> hosts";  
+my $msp = (" " x 15);
+my $netbits = $subnet;
+my $nonets = 2**$netbits;
+my $hostbits = 32-$subnet;
+my $nohosts = 2**$hostbits;
+my $aap = "";
+if ($activeoctet == 1) { $aap = "1st"; }
+elsif ($activeoctet == 2) { $aap = "2nd"; }
+elsif ($activeoctet == 3) { $aap = "3rd"; }
+elsif ($activeoctet == 4) { $aap = "4th"; }
+	print <<XOUT;
+
+	-------------------------------------------
+	Explanation: 
+
+	       IP: $oct1.$oct2.$oct3.$oct4   SUBNET: $subnet
+	
+XOUT
+
+print $msp . $submarker . "\n";
+print $msp . "Binary IP: $binoct1.$binoct2.$binoct3.$binoct4 \n";
+print "\n";
+#print $msp . "   Subnet: " . ip2bin($subnetaddy,"dots") . "\n";
+print $msp . " Active Octet: $aap\n";
+print $msp . " Active CIDR : $activecidr bit(s) of this octet are NETWORK\n";
+print "\n";	
+#print $msp . "Active Octet decimal: $workingoctetdec\n";
+print $msp . " Active Octet binary: $explanationoctet\n";
+print $msp . "                     " . (" " x $activecidr) . "↑\n";
+print $msp . "        " . (" " x $activecidr) ."Blocksize Bit|\n";
+print $msp . "\n";
+print $msp . "Blocksize bit value: $blocksize\n";
+print $msp . "  (Increment blocksize bit for next network address)\n";
+print "\n";
+print $msp . "for /$subnet => \n";
+print $msp . sprintf("%16s %3s %8s %s %10s\n","Network bits:","$netbits","2^$netbits","=",addcommas($nonets) . " networks");
+print $msp . sprintf("%16s %3s %8s %s %10s\n",   "Host bits:","$hostbits","(2^$hostbits)-2","=",addcommas($nohosts) . " - 2 hosts");
+print "        -------------------------------------------\n";
+print "\n\n";
+
+	}
 }
 
 #################################
@@ -273,6 +373,11 @@ print <<COUT;
        This will compare the IPs, show what subnet they belong to
 	and print all info about the subnet
 
+    $0 explain <ip_address/cidr>
+
+	This will return all subnet info and
+	 will also print calculation information
+
 
 COUT
 
@@ -307,13 +412,17 @@ return $dec_subnet;
 sub ip2bin {
 
 my $ip = shift;
+my $dotflag = shift;
+
 my @splitip = split /\./, $ip;
 my $binip = "";
 
 foreach my $dip (@splitip) {
 	$binip .= dec2bin($dip);
+	if ($dotflag) { $binip .= "."; }
 	}
 
+if ($dotflag) { $binip = substr($binip,0,length($binip)-1); }
 return $binip;
 }
 
@@ -387,7 +496,7 @@ elsif ($cidr eq 31) {
 else {
 
 	$cidr = 32-$cidr;
-	my $cidnets = 2**$cidr;
+	my $cidnets = addcommas(2**$cidr);
 
 	return "$cidnets - 2";
 	}
@@ -415,6 +524,17 @@ return $subnetdec,$wildcarddec;
 
 ##################################
 
-
+sub addcommas {
+my $int = shift;
+my @intarr = split //, $int;
+my $lc = 1;
+my $retstr;
+for (my $i = $#intarr;$i>-1;$i-- ) {
+	$retstr .= $intarr[$i];
+	if (!($lc % 3) && ($i != 0)) { $retstr.= ","; }
+	$lc++;
+	}
+return reverse($retstr);
+}
 
 
